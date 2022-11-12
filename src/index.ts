@@ -158,7 +158,7 @@ function draw(currentTimeMillis: number) {
             let x = columnToX(j);
             let y = rowToY(i);
 
-            ctx.fillRect(x, y, environmentTileSize, environmentTileSize);
+            ctx.fillRect(Math.floor(x), Math.floor(y), environmentTileSize, environmentTileSize);
             ctx.fillStyle = "black";
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
