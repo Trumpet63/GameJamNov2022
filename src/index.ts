@@ -1,7 +1,7 @@
 import { Color } from "./color";
-import { environment, EnvironmentKey } from "./environment";
+import { environment, environmentColumns, EnvironmentKey, environmentRows } from "./environment";
 import { KeyState } from "./key_state";
-import { clampValue, mapLinear } from "./util";
+import { clampValue, mapLinear, wrapValue } from "./util";
 
 let previousTimeMillis: number;
 
@@ -12,17 +12,20 @@ canvas.id = "gameCanvas";
 let ctx: CanvasRenderingContext2D = canvas.getContext("2d");
 
 let environmentTileSize: number = 50;
-let topLeftRow: number = 9;
-let topLeftColumn: number = 9;
-let minimumSpeed: number = 0.001;
+let topLeftRow: number = Math.floor(environmentRows / 2 - canvas.width / 2 / environmentTileSize) - 0.5;
+let topLeftColumn: number = Math.floor(environmentColumns / 2 - canvas.height / 2 / environmentTileSize) - 0.5;
+
+let minimumSpeed: number = 0.003;
 let currentSpeed: number = minimumSpeed;
 let speedDegredationTimeMillis: number = 700;
 let lastSpeedBoostSpeed: number;
+
 let lastSpeedBoostTimeMillis: number;
 
 let currentRotation: number = 0;
-let minimumRotationspeed: number = 0.001;
-let currentRotationSpeed: number = minimumRotationspeed;
+let minimumRotationSpeed: number = 0.004;
+let currentRotationSpeed: number = minimumRotationSpeed;
+let lastSpeedBoostRotationSpeed: number;
 
 let logCounter: number = 0;
 
@@ -38,24 +41,6 @@ let mouseDownTime: number;
 let preloadRegistry: Map<string, boolean> = new Map();
 
 let guySprite: HTMLImageElement = loadImage("../assets/guy.png");
-
-// let centerColumn: number = topLeftColumn + (canvas.width / 2) / environmentTileSize;
-// let centerRow: number = topLeftRow + (canvas.height / 2) / environmentTileSize;
-// let centerX: number = columnToX(centerColumn);
-// let centerY: number = rowToY(centerRow);
-
-// let guyRadius: number = 8;
-// ctx.save();
-// ctx.beginPath();
-// ctx.arc(centerX, centerY, guyRadius, 0, 2 * Math.PI);
-// ctx.closePath();
-
-// ctx.lineWidth = 2;
-// ctx.strokeStyle = "black";
-// ctx.stroke();
-
-// ctx.fillStyle = "white";
-// ctx.fill();
 
 document.body.appendChild(canvas);
 
@@ -89,8 +74,13 @@ document.onmouseup = (e: MouseEvent) => {
         (mouseUpY - mouseDownY) / (mouseUpTime - mouseDownTime),
         10,
     );
-    lastSpeedBoostSpeed = speedBoost * 0.005;
     lastSpeedBoostTimeMillis = mouseUpTime;
+    lastSpeedBoostSpeed = speedBoost * 0.004;
+    lastSpeedBoostRotationSpeed = speedBoost * 0.005;
+}
+
+for (let i = 10; i > -200; i--) {
+    console.log(i, wrapValue(10, i, 20));
 }
 
 function draw(currentTimeMillis: number) {
@@ -112,7 +102,10 @@ function draw(currentTimeMillis: number) {
         moveY = moveY / magnitude * elapsedTimeMillis * currentSpeed;
         topLeftColumn += moveX;
         topLeftRow += moveY;
+
+        currentRotation += elapsedTimeMillis * currentRotationSpeed;
     }
+
     if (lastSpeedBoostSpeed !== undefined) {
         currentSpeed = mapLinear(
             0,
@@ -121,18 +114,38 @@ function draw(currentTimeMillis: number) {
             lastSpeedBoostSpeed,
             minimumSpeed,
         );
+        currentRotationSpeed = mapLinear(
+            0,
+            currentTimeMillis - lastSpeedBoostTimeMillis,
+            speedDegredationTimeMillis,
+            lastSpeedBoostRotationSpeed,
+            minimumRotationSpeed,
+        );
     } else {
         currentSpeed = minimumSpeed;
+        currentRotationSpeed = minimumRotationSpeed;
     }
 
+    let bottomRightColumn: number = topLeftColumn + canvas.width / environmentTileSize;
+    let bottomRightRow: number = topLeftRow + canvas.height / environmentTileSize;
+    let minColumn: number = Math.floor(topLeftColumn);
+    let maxColumn: number = Math.ceil(bottomRightColumn);
+    let minRow: number = Math.floor(topLeftRow);
+    let maxRow: number = Math.ceil(bottomRightRow);
+    let environmentDrawCount: number = 0;
     ctx.save();
-    for (let i = 0; i < environment.length; i++) {
-        for (let j = 0; j < environment[i].length; j++) {
-            let key: EnvironmentKey = environment[i][j];
+    for (let i = minRow; i <= maxRow; i++) {
+        for (let j = minColumn; j <= maxColumn; j++) {
+            let wrappedRow: number = wrapValue(0, i, environmentRows - 1);
+            let wrappedColumn: number = wrapValue(0, j, environmentColumns - 1);
+            let key: EnvironmentKey = environment[wrappedRow][wrappedColumn];
             let color: string;
             switch(key) {
+                case EnvironmentKey.DEFAULT:
+                    color = Color.toRGB(100, 255, 100);
+                    break;
                 case EnvironmentKey.FOREST:
-                    color = Color.toRGB(0, 255, 0);
+                    color = Color.toRGB(0, 200, 0);
                     break;
                 case EnvironmentKey.DESERT:
                     color = Color.toRGB(255, 255, 50);
@@ -149,9 +162,17 @@ function draw(currentTimeMillis: number) {
             ctx.fillStyle = "black";
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
-            ctx.fillText("(" + i + "," + j + ")", x, y);
+            ctx.fillText("(" + wrappedRow + "," + wrappedColumn + ")", x, y);
+            environmentDrawCount++;
         }
     }
+    ctx.restore();
+    
+    ctx.save();
+    ctx.fillStyle = "black";
+    ctx.textBaseline = "bottom";
+    ctx.font = "30px Arial";
+    ctx.fillText(environmentDrawCount.toString(), canvas.width / 2 - 10, canvas.height);
     ctx.restore();
 
     let centerColumn = topLeftColumn + (canvas.width / 2) / environmentTileSize;
