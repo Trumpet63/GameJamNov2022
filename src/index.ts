@@ -60,6 +60,13 @@ let guyMaxHealth: number = 100;
 let guyCurrentHealth: number = guyMaxHealth;
 let guyLastDamagedTimeMillis: number;
 
+let environmentSprites: HTMLImageElement[] = [
+    loadImage("../assets/default.png"),
+    loadImage("../assets/forest.png"),
+    loadImage("../assets/desert.png"),
+    loadImage("../assets/water.png"),
+];
+
 let environmentTimers: {currentTime: number, maxTime: number}[] = [
     {currentTime: 0, maxTime: 7000},
     {currentTime: 0, maxTime: 3500},
@@ -87,8 +94,13 @@ let isInRestTime: boolean = true;
 
 let floatingTexts: FloatingText[] = [];
 
+let numTutorialsToShow: number = 3;
+let numTutorialsShown: number = 0;
+
 let isGameOver: boolean = false;
 let gameOverTimeMillis: number;
+let isGameWon: boolean;
+
 
 document.body.appendChild(canvas);
 
@@ -305,6 +317,7 @@ function draw(currentTimeMillis: number) {
                     + (damageMultiplier === 3 ? " CRITICAL" : ""),
                 "black",
                 20,
+                -0.001,
                 currentTimeMillis,
             ));
         }
@@ -337,6 +350,7 @@ function draw(currentTimeMillis: number) {
                     + (damageMultiplier === 3 ? " CRITICAL" : ""),
                 "red",
                 20,
+                -0.001,
                 currentTimeMillis,
             ));
         }
@@ -452,6 +466,7 @@ function draw(currentTimeMillis: number) {
 
     if (guyCurrentHealth <= 0 && !isGameOver) {
         isGameOver = true;
+        isGameWon = false;
         gameOverTimeMillis = currentTimeMillis;
     }
     
@@ -504,9 +519,10 @@ function draw(currentTimeMillis: number) {
 
     // draw guy swirly thing
     if (!isGameOver) {
+        let guyDefaultColor: Color = getTintedColor(currentTransformation as EnvironmentKey);
         ctx.save();
         ctx.lineWidth = 2;
-        ctx.strokeStyle = "gray";
+        ctx.strokeStyle = guyDefaultColor.toString();
         ctx.beginPath();
         ctx.arc(
             guyCenterX,
@@ -544,7 +560,7 @@ function draw(currentTimeMillis: number) {
         ctx.restore();
 
         ctx.save();
-        ctx.strokeStyle = "gray";
+        ctx.strokeStyle = "black";
         ctx.lineWidth = 2;
         ctx.strokeRect(tileCenterX - tileSize / 2, tileCenterY - tileSize / 2, tileSize, tileSize);
         ctx.restore();
@@ -558,7 +574,7 @@ function draw(currentTimeMillis: number) {
         ctx.save();
         ctx.strokeStyle = "black";
         ctx.lineWidth = 1;
-        ctx.fillStyle = "gray";
+        ctx.fillStyle = "black";
         ctx.fillRect(topLeftX, topLeftY, width * fillRatio, height);
         ctx.strokeRect(topLeftX, topLeftY, width, height);
         ctx.restore();
@@ -598,9 +614,15 @@ function draw(currentTimeMillis: number) {
         )
         if (restTimeRemainingMillis <= 0 && !isGameOver) {
             currentWave++;
-            spawnEnemies(currentWave);
             isInRestTime = false;
-        } else {
+            if (currentWave >= waves.length) {
+                isGameOver = true;
+                isGameWon = true;
+                gameOverTimeMillis = currentTimeMillis;
+            } else {
+                spawnEnemies(currentWave);
+            }
+        } else if(!isGameOver) {
             ctx.save();
             ctx.fillStyle = "black";
             ctx.textAlign = "left";
@@ -623,7 +645,7 @@ function draw(currentTimeMillis: number) {
     drawTransformationExpBar(canvas.width, 23, 3);
 
     // draw game over text
-    if (isGameOver) {
+    if (isGameOver && !isGameWon) {
         let timeSinceGameOverMillis: number = currentTimeMillis - gameOverTimeMillis;
         let textOpacity = mapLinear(0, timeSinceGameOverMillis, 2000, 0, 1);
         ctx.save();
@@ -634,7 +656,32 @@ function draw(currentTimeMillis: number) {
         ctx.textBaseline = "middle";
         ctx.fillText("Game Over", canvas.width / 2, canvas.height / 2);
         ctx.restore();
-        console.log(textOpacity);
+    } else if(isGameOver && isGameWon) {
+        let timeSinceGameOverMillis: number = currentTimeMillis - gameOverTimeMillis;
+        let textOpacity = mapLinear(0, timeSinceGameOverMillis, 2000, 0, 1);
+        ctx.save();
+        ctx.globalAlpha = textOpacity;
+        ctx.font = "40px Arial"
+        ctx.fillStyle = "black";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("You Win!", canvas.width / 2, canvas.height / 2);
+        ctx.restore();
+    }
+
+    // draw the drag tutorial text
+    if (numTutorialsShown < numTutorialsToShow
+        && currentTimeMillis > 2000 + 2000 * numTutorialsShown) {
+        floatingTexts.push(new FloatingText(
+            centerRow - 3,
+            centerColumn - 5,
+            "vv Click, Drag, Release! vv",
+            "black",
+            40,
+            0.006,
+            currentTimeMillis,
+        ));
+        numTutorialsShown++;
     }
 
     // draw fps
@@ -716,6 +763,7 @@ function drawEnvironment(topLeftColumn: number, topLeftRow: number) {
             let y = rowToY(i, topLeftRow, environmentTileSize);
             drawEnvironmentTile(Math.floor(x), Math.floor(y), environmentTileSize, key);
 
+            // mark each tile with its row and column
             // ctx.fillStyle = "black";
             // ctx.textAlign = "center";
             // ctx.textBaseline = "middle";
@@ -728,8 +776,16 @@ function drawEnvironment(topLeftColumn: number, topLeftRow: number) {
 }
 
 function drawEnvironmentTile(x: number, y: number, size: number, key: EnvironmentKey) {
-    ctx.fillStyle = getEnvironmentColor(key).toString();
-    ctx.fillRect(x, y, size, size);
+    let environmentSprite: HTMLImageElement = environmentSprites[key as number];
+    ctx.drawImage(
+        environmentSprite,
+        x,
+        y,
+        size,
+        size,
+    );
+    // ctx.fillStyle = getEnvironmentColor(key).toString();
+    // ctx.fillRect(x, y, size, size);
 }
 
 function getCurrentEnvironment(centerColumn: number, centerRow: number): EnvironmentKey {

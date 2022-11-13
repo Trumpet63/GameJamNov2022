@@ -11,7 +11,8 @@ x level ups
 x level ups influence damage
 x spawn text that says "CRITICAL!" whenever there's a critical hit, to help the player figure out that mechanic
 x trigger a game over when the guy dies
-spawn at the start "swipe down" text to teach the main movement mechanic
+x special condition for winning the game too
+x spawn at the start "swipe down" text to teach the main movement mechanic
 enemies get stronger each wave?
 
 different kinds of enemies

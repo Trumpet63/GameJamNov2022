@@ -21,6 +21,7 @@ export class FloatingText {
         text: string,
         color: string,
         size: number,
+        velocityRow: number,
         currentTimeMillis: number,
     ) {
         this.row = row;
@@ -28,9 +29,9 @@ export class FloatingText {
         this.text = text;
         this.color = color;
         this.size = size;
+        this.velocityRow = velocityRow;
         this.lifetimeMillis = 1000;
         this.creationTimeMillis = currentTimeMillis;
-        this.velocityRow = -0.001;
     }
 
     public update(
