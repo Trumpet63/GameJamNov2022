@@ -82,6 +82,17 @@ export function getEnvironmentColor(key: EnvironmentKey): Color {
     }
 }
 
+export function getTintedColor(key: EnvironmentKey): Color {
+    let color: Color = key === EnvironmentKey.DEFAULT
+        ? new Color(255, 255, 255)
+        : getEnvironmentColor(key);
+    return Color.lerpColors(
+        color,
+        new Color(255, 255, 255),
+        0.15,
+    );
+}
+
 // a is assumed to be the origin
 export function getDistance(a: number, b: number, min: number, max: number) {
     let dist1 = wrapValue(min, b - a, max);

@@ -1,10 +1,12 @@
 import { Color } from "./color";
 import { Enemy } from "./enemy";
 import { environment, environmentColumns, EnvironmentKey, environmentRows } from "./environment";
+import { FloatingText } from "./floating_text";
 import { KeyState } from "./key_state";
 import { Missile } from "./missile";
-import { clampValue, collideCircles, columnToX, getCollisionVelocity, getEnvironmentColor, mapLinear, randomInt, rowToY, wrapValue } from "./util";
+import { clampValue, collideCircles, columnToX, getCollisionVelocity, getEnvironmentColor, getTintedColor, mapLinear, randomInt, rowToY, wrapValue } from "./util";
 import { Vector } from "./vector";
+import { waves } from "./waves";
 
 let previousTimeMillis: number;
 
@@ -54,6 +56,9 @@ let minGuyRadius: number = 10;
 let maxGuyRadius: number = 40;
 let currentGuyRadius: number = minGuyRadius;
 let lastSpeedBoostGuyRadius: number;
+let guyMaxHealth: number = 100;
+let guyCurrentHealth: number = guyMaxHealth;
+let guyLastDamagedTimeMillis: number;
 
 let environmentTimers: {currentTime: number, maxTime: number}[] = [
     {currentTime: 0, maxTime: 7000},
@@ -62,11 +67,28 @@ let environmentTimers: {currentTime: number, maxTime: number}[] = [
     {currentTime: 0, maxTime: 3500},
 ];
 let currentTransformation: number = 0;
+let transformationLevels: {exp: number, toNextLevel: number, level: number}[] = [
+    {exp: 0, toNextLevel: 200, level: 1},
+    {exp: 0, toNextLevel: 100, level: 1},
+    {exp: 0, toNextLevel: 100, level: 1},
+    {exp: 0, toNextLevel: 100, level: 1},
+];
 
+let minEnemyRadius: number = 7;
+let maxEnemyRadius: number = 20;
 let enemies: Enemy[] = [];
-// spawnEnemies();
 
-let missile: Missile;
+let missiles: Missile[] = [];
+
+let currentWave: number = -1;
+let previousWaveEndTimeMillis: number = performance.now();
+let waveRestTimeMillis: number = 8000;
+let isInRestTime: boolean = true;
+
+let floatingTexts: FloatingText[] = [];
+
+let isGameOver: boolean = false;
+let gameOverTimeMillis: number;
 
 document.body.appendChild(canvas);
 
@@ -101,7 +123,7 @@ document.onmouseup = (e: MouseEvent) => {
         10,
     );
     lastSpeedBoostTimeMillis = mouseUpTime;
-    lastSpeedBoostSpeed = Math.max(minimumSpeed, speedBoost * 0.004);
+    lastSpeedBoostSpeed = Math.max(minimumSpeed, speedBoost * 0.003);
     lastSpeedBoostRotationSpeed = Math.max(minimumRotationSpeed, speedBoost * 0.005);
     lastSpeedBoostGuyRadius = mapLinear(0, speedBoost, 10, minGuyRadius, maxGuyRadius);
 }
@@ -187,18 +209,22 @@ function draw(currentTimeMillis: number) {
     
     let environmentDrawCount = drawEnvironment(topLeftColumn, topLeftRow);
 
-    if (missile === undefined) {
-        missile = new Missile(centerRow + 5, centerColumn + 5, 5, EnvironmentKey.DEFAULT, 0.0003);
-    }
-
     // update all enemy x's and y's and move velocities
     for (let i = 0; i < enemies.length; i++) {
         enemies[i].update(centerColumn, centerRow, environmentTileSize, currentTimeMillis);
     }
 
-    missile.update(centerColumn, centerRow, environmentTileSize, currentTimeMillis);
+    // update all missiles
+    for (let i = 0; i < missiles.length; i++) {
+        missiles[i].update(centerColumn, centerRow, environmentTileSize, currentTimeMillis);
+    }
 
-    // do collision and game simulation stuff
+    // update all the floating texts
+    for (let i = 0; i < floatingTexts.length; i++) {
+        floatingTexts[i].update(centerColumn, centerRow, environmentTileSize, currentTimeMillis);
+    }
+
+    // do enemy-guy collision and game simulation stuff
     for (let i = 0; i < enemies.length; i++) {
         let enemy: Enemy = enemies[i];
         if (collideCircles(
@@ -212,6 +238,7 @@ function draw(currentTimeMillis: number) {
                 enemy.lastHitTimeMillis === undefined
                 || (currentTimeMillis - enemy.lastHitTimeMillis) > enemy.hitRecoveryDurationMillis
             )
+            && !isGameOver
         ) {
             let enemyMass: number = enemy.radius;
             let guyMass: number = currentGuyRadius;
@@ -244,15 +271,74 @@ function draw(currentTimeMillis: number) {
             enemy.hitVelocityColumn = enemyHitVelocity.x;
             enemy.hitVelocityRow = enemyHitVelocity.y;
             
+            // determine damage delt to enemy
             let damageMultiplier: number = getDamageMultiplier(currentTransformation as EnvironmentKey, enemy.element);
-            console.log(damageMultiplier);
-            enemy.currentHealth -= mapLinear(
+            let damageDealt: number = mapLinear(
                 minGuyRadius,
                 currentGuyRadius,
                 maxGuyRadius,
                 0,
-                10 * damageMultiplier,
+                (10 + transformationLevels[currentTransformation as number].level - 1) * damageMultiplier,
             );
+            enemy.currentHealth -= damageDealt;
+
+            // award xp if enemy was killed
+            if (enemy.currentHealth <= 0) {
+                let expGain: number = mapLinear(
+                    minEnemyRadius,
+                    enemy.radius,
+                    maxEnemyRadius,
+                    50,
+                    400,
+                );
+                if (currentTransformation !== EnvironmentKey.DEFAULT) {
+                    transformationLevels[currentTransformation as number].exp += expGain;
+                }
+                transformationLevels[EnvironmentKey.DEFAULT as number].exp += expGain * 0.3;
+            }
+
+            // spawn floating text
+            floatingTexts.push(new FloatingText(
+                enemy.row,
+                enemy.column,
+                "-" + (Math.round(damageDealt * 10) / 10).toFixed(1)
+                    + (damageMultiplier === 3 ? " CRITICAL" : ""),
+                "black",
+                20,
+                currentTimeMillis,
+            ));
+        }
+    }
+
+    // do missile-guy collision
+    for (let i = 0; i < missiles.length; i++) {
+        let missile: Missile = missiles[i];
+        if (collideCircles(
+            canvas.width / 2,
+            canvas.height / 2,
+            minGuyRadius, // Deliberately use min guy radius here
+            missile.x,
+            missile.y,
+            missile.radius)
+            && !isGameOver
+        ) {
+            let damageMultiplier: number = getDamageMultiplier(missile.element, currentTransformation as EnvironmentKey);
+            let damageDealt: number = damageMultiplier * 10
+            guyCurrentHealth -= damageDealt;
+            guyLastDamagedTimeMillis = currentTimeMillis;
+            missiles.splice(i, 1);
+            i--;
+
+            // spawn floating text
+            floatingTexts.push(new FloatingText(
+                centerRow,
+                centerColumn,
+                "-" + (Math.round(damageDealt * 10) / 10).toFixed(1)
+                    + (damageMultiplier === 3 ? " CRITICAL" : ""),
+                "red",
+                20,
+                currentTimeMillis,
+            ));
         }
     }
 
@@ -264,28 +350,77 @@ function draw(currentTimeMillis: number) {
         }
     }
 
+    // detect the end of a wave
+    if (enemies.length === 0 && !isInRestTime) {
+        previousWaveEndTimeMillis = currentTimeMillis;
+        isInRestTime = true;
+    }
+
+    // remove old missiles
+    for (let i = 0; i < missiles.length; i++) {
+        let missile: Missile = missiles[i];
+        if (currentTimeMillis - missile.creationTimeMillis > missile.lifetimeMillis) {
+            missiles.splice(i, 1);
+            i--;
+        }
+    }
+
+    // remove old floating texts
+    for (let i = 0; i < floatingTexts.length; i++) {
+        let floatingText: FloatingText = floatingTexts[i];
+        if (currentTimeMillis - floatingText.creationTimeMillis > floatingText.lifetimeMillis) {
+            floatingTexts.splice(i, 1);
+            i--;
+        }
+    }
+
     // draw all enemies
     for (let i = 0; i < enemies.length; i++) {
         enemies[i].draw(currentTimeMillis, ctx);
     }
 
-    missile.draw(currentTimeMillis, ctx);
+    // draw all missiles
+    for (let i = 0; i < missiles.length; i++) {
+        missiles[i].draw(currentTimeMillis, ctx);
+    }
+
+    // draw all floating texts
+    for (let i = 0; i < floatingTexts.length; i++) {
+        floatingTexts[i].draw(currentTimeMillis, ctx);
+    }
+
+    // enemies can maybe spawn missiles
+    for (let i = 0; i < enemies.length; i++) {
+        let enemy = enemies[i];
+        if (currentTimeMillis - enemy.lastMissileSpawnAttemptMillis > 1000) {
+            let spawnChance = mapLinear(minEnemyRadius, enemy.radius, maxEnemyRadius, 0.2, 1);
+            if (Math.random() <= spawnChance) {
+                let moveSpeed = mapLinear(minEnemyRadius, enemy.radius, maxEnemyRadius, 0.0003, 0.001);
+                let turnSpeed = mapLinear(minEnemyRadius, enemy.radius, maxEnemyRadius, 0.001, 0.0001);
+                let lifeTimeMillis = mapLinear(minEnemyRadius, enemy.radius, maxEnemyRadius, 3000, 8000);
+                missiles.push(new Missile(enemy.row, enemy.column, 3, enemy.element, moveSpeed, turnSpeed, lifeTimeMillis, currentTimeMillis));
+            }
+            enemy.lastMissileSpawnAttemptMillis = currentTimeMillis;
+        }
+    }
 
     // update environment timers
     let currentEnvironment: EnvironmentKey = getCurrentEnvironment(centerColumn, centerRow);
-    if (currentEnvironment !== (currentTransformation as EnvironmentKey)) {
-        let currentTimer = environmentTimers[currentEnvironment];
-        currentTimer.currentTime += elapsedTimeMillis;
-        if (currentTimer.currentTime > currentTimer.maxTime) {
-            currentTimer.currentTime = currentTimer.maxTime
+    if (!isGameOver) {
+        if (currentEnvironment !== (currentTransformation as EnvironmentKey)) {
+            let currentTimer = environmentTimers[currentEnvironment];
+            currentTimer.currentTime += elapsedTimeMillis;
+            if (currentTimer.currentTime > currentTimer.maxTime) {
+                currentTimer.currentTime = currentTimer.maxTime
+            }
         }
-    }
-    for (let i = 0; i < environmentTimers.length; i++) {
-        if ((i as EnvironmentKey) !== currentEnvironment) {
-            let currentTimer = environmentTimers[i];
-            currentTimer.currentTime -= elapsedTimeMillis;
-            if (currentTimer.currentTime < 0) {
-                currentTimer.currentTime = 0;
+        for (let i = 0; i < environmentTimers.length; i++) {
+            if ((i as EnvironmentKey) !== currentEnvironment) {
+                let currentTimer = environmentTimers[i];
+                currentTimer.currentTime -= elapsedTimeMillis;
+                if (currentTimer.currentTime < 0) {
+                    currentTimer.currentTime = 0;
+                }
             }
         }
     }
@@ -293,42 +428,114 @@ function draw(currentTimeMillis: number) {
     // trigger transformation
     if (currentEnvironment !== (currentTransformation as EnvironmentKey)
         && environmentTimers[currentEnvironment].currentTime === environmentTimers[currentEnvironment].maxTime
+        && !isGameOver
     ) {
-        console.log("TRANSFORM!!!");
         for (let i = 0; i < environmentTimers.length; i++) {
             environmentTimers[i].currentTime = 0;
         }
         currentTransformation = currentEnvironment as number;
     }
+
+    // update transformation levels
+    for (let i = 0; i < transformationLevels.length; i++) {
+        let transformation = transformationLevels[i];
+        if (transformation.exp >= transformation.toNextLevel) {
+            transformation.exp -= transformation.toNextLevel;
+            transformation.level++;
+            transformation.toNextLevel *= 1.1;
+
+            if (i as EnvironmentKey === EnvironmentKey.DEFAULT) {
+                guyMaxHealth += 20;
+            }
+        }
+    }
+
+    if (guyCurrentHealth <= 0 && !isGameOver) {
+        isGameOver = true;
+        gameOverTimeMillis = currentTimeMillis;
+    }
     
     // draw environment draw count
-    ctx.save();
-    ctx.fillStyle = "black";
-    ctx.textBaseline = "bottom";
-    ctx.font = "30px Arial";
-    ctx.fillText(environmentDrawCount.toString(), canvas.width / 2 - 10, canvas.height);
-    ctx.restore();
+    if (false) {
+        ctx.save();
+        ctx.fillStyle = "black";
+        ctx.textBaseline = "bottom";
+        ctx.font = "30px Arial";
+        ctx.fillText(environmentDrawCount.toString(), canvas.width / 2 - 10, canvas.height);
+        ctx.restore();
+    }
 
     // draw the guy
-    ctx.save();
-    ctx.translate(guyCenterX, guyCenterY);
-    ctx.rotate(currentRotation);
-    ctx.translate(-guyCenterX, -guyCenterY);
-    ctx.drawImage(guySprite, guyCenterX - guySprite.width / 2, guyCenterY - guySprite.height / 2);
-    ctx.restore();
+    if (!isGameOver) {
+        ctx.save();
+        ctx.translate(guyCenterX, guyCenterY);
+        ctx.rotate(currentRotation);
+        ctx.translate(-guyCenterX, -guyCenterY);
+        ctx.drawImage(guySprite, guyCenterX - guySprite.width / 2, guyCenterY - guySprite.height / 2);
+        ctx.restore();
+    }
 
-    // draw guy radius (for testing)
-    ctx.save();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = "gray";
-    ctx.beginPath();
-    ctx.arc(guyCenterX, guyCenterY, currentGuyRadius, 0, 2 * Math.PI);
-    ctx.closePath();
-    ctx.stroke();
-    ctx.restore();
+    // color the guy's head
+    if (!isGameOver) {
+        ctx.save();
+        let guyColorRatio: number = 1;
+        let guyDefaultColor: Color = getTintedColor(currentTransformation as EnvironmentKey);
+        if (guyLastDamagedTimeMillis !== undefined) {
+            guyColorRatio = mapLinear(
+                guyLastDamagedTimeMillis,
+                currentTimeMillis,
+                guyLastDamagedTimeMillis + 1000,
+                0,
+                1,
+            );
+        }
+        let guyColor: Color = Color.lerpColors(
+            new Color(255, 0, 0),
+            guyDefaultColor,
+            guyColorRatio,
+        );
+        ctx.fillStyle = guyColor.toString();
+        ctx.beginPath();
+        ctx.arc(guyCenterX, guyCenterY, 6, 0, 2 * Math.PI);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // draw guy swirly thing
+    if (!isGameOver) {
+        ctx.save();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "gray";
+        ctx.beginPath();
+        ctx.arc(
+            guyCenterX,
+            guyCenterY,
+            currentGuyRadius,
+            currentTimeMillis / 60,
+            currentTimeMillis / 60 + mapLinear(minGuyRadius, currentGuyRadius, maxGuyRadius, 1, 2),
+        );
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    // draw the guy's health bar
+    if (!isGameOver) {
+        let guyHealthWidth: number = guyMaxHealth / 2;
+        let guyHealthHeight: number = 6;
+        let guyHealthTopLeftX: number = guyCenterX - guyHealthWidth / 2;
+        let guyHealthTopLeftY: number = guyCenterY - maxGuyRadius - guyHealthHeight / 2 - 8;
+        ctx.save();
+        ctx.fillStyle = "red";
+        ctx.strokeStyle = "black";
+        ctx.lineWidth = 2;
+        ctx.fillRect(guyHealthTopLeftX, guyHealthTopLeftY, guyHealthWidth * (guyCurrentHealth / guyMaxHealth), guyHealthHeight);
+        ctx.strokeRect(guyHealthTopLeftX, guyHealthTopLeftY, guyHealthWidth, guyHealthHeight);
+        ctx.restore();
+    }
 
     // draw transform-to bar
-    if (currentEnvironment !== currentTransformation) {
+    if (currentEnvironment !== currentTransformation && !isGameOver) {
         let tileCenterX: number = guyCenterX + 50;
         let tileCenterY: number = guyCenterY - 70;
         let tileSize: number = 25;
@@ -357,16 +564,91 @@ function draw(currentTimeMillis: number) {
         ctx.restore();
     }
 
-    // draw fps
-    let fps: number = 1000 / elapsedTimeMillis;
+    // draw the UI background
     ctx.save();
-    ctx.fillStyle = "black";
-    ctx.textAlign = "right";
-    ctx.textBaseline = "bottom";
-    ctx.font = "30px Arial";
-    ctx.fillText(Math.round(fps).toString() + "FPS", canvas.width, canvas.height);
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, canvas.width, 40);
     ctx.restore();
 
+    // draw the wave number
+    ctx.save();
+    ctx.fillStyle = "black";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.font = "20px Arial";
+    ctx.fillText("Wave " + (currentWave + 1), 3, 0);
+    ctx.restore();
+
+    // draw the current number of enemies alive
+    ctx.save();
+    ctx.fillStyle = "black";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.font = "20px Arial";
+    ctx.fillText(enemies.length + " Enemies Left", 100, 0);
+    ctx.restore();
+
+    // draw the wave rest timer and/or trigger the next wave
+    if (enemies.length === 0) {
+        let restTimeRemainingMillis = waveRestTimeMillis - (currentTimeMillis - previousWaveEndTimeMillis);
+        guyCurrentHealth = Math.min(
+            guyMaxHealth,
+            guyCurrentHealth + elapsedTimeMillis / waveRestTimeMillis * guyMaxHealth,
+        )
+        if (restTimeRemainingMillis <= 0 && !isGameOver) {
+            currentWave++;
+            spawnEnemies(currentWave);
+            isInRestTime = false;
+        } else {
+            ctx.save();
+            ctx.fillStyle = "black";
+            ctx.textAlign = "left";
+            ctx.textBaseline = "top";
+            ctx.font = "20px Arial";
+            let tenths: number = Math.round(restTimeRemainingMillis / 100);
+            ctx.fillText(
+                (tenths / 10).toFixed(1) + "s Until Next Wave",
+                3,
+                20,
+            )
+            ctx.restore();
+        }
+    }
+
+    // draw tranformation exp bars and levels
+    drawTransformationExpBar(canvas.width - 200, 3, 0);
+    drawTransformationExpBar(canvas.width - 200, 23, 1);
+    drawTransformationExpBar(canvas.width, 3, 2);
+    drawTransformationExpBar(canvas.width, 23, 3);
+
+    // draw game over text
+    if (isGameOver) {
+        let timeSinceGameOverMillis: number = currentTimeMillis - gameOverTimeMillis;
+        let textOpacity = mapLinear(0, timeSinceGameOverMillis, 2000, 0, 1);
+        ctx.save();
+        ctx.globalAlpha = textOpacity;
+        ctx.font = "40px Arial"
+        ctx.fillStyle = "black";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("Game Over", canvas.width / 2, canvas.height / 2);
+        ctx.restore();
+        console.log(textOpacity);
+    }
+
+    // draw fps
+    if (false) {
+        let fps: number = 1000 / elapsedTimeMillis;
+        ctx.save();
+        ctx.fillStyle = "black";
+        ctx.textAlign = "right";
+        ctx.textBaseline = "bottom";
+        ctx.font = "30px Arial";
+        ctx.fillText(Math.round(fps).toString() + "FPS", canvas.width, canvas.height);
+        ctx.restore();
+    }
+    
     previousTimeMillis = currentTimeMillis;
     window.requestAnimationFrame(draw);
 }
@@ -397,13 +679,13 @@ function preload() {
     window.requestAnimationFrame(draw);
 }
 
-function spawnEnemies() {
-    for (let i = 0; i < 10; i++) {
-        let minRadius: number = 7;
-        let maxRadius: number = 20;
-        let radius: number = randomInt(minRadius, maxRadius);
-        let health: number = mapLinear(minRadius, radius, maxRadius, 50, 200);
-        let speed: number = mapLinear(minRadius, radius, maxRadius, 0.001, 0.0005);
+function spawnEnemies(currentWave: number) {
+    let currentTimeMillis: number = performance.now();
+    let wave: number[] = waves[currentWave];
+    for (let i = 0; i < wave.length; i++) {
+        let radius: number = wave[i];
+        let health: number = mapLinear(minEnemyRadius, radius, maxEnemyRadius, 50, 200);
+        let speed: number = mapLinear(minEnemyRadius, radius, maxEnemyRadius, 0.001, 0.0005);
         enemies.push(new Enemy(
             Math.random() * environmentColumns,
             Math.random() * environmentRows,
@@ -411,6 +693,7 @@ function spawnEnemies() {
             health,
             randomInt(0, 3) as EnvironmentKey,
             speed,
+            currentTimeMillis,
         ));
     }
 }
@@ -433,11 +716,11 @@ function drawEnvironment(topLeftColumn: number, topLeftRow: number) {
             let y = rowToY(i, topLeftRow, environmentTileSize);
             drawEnvironmentTile(Math.floor(x), Math.floor(y), environmentTileSize, key);
 
-            ctx.fillStyle = "black";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText("(" + wrappedRow + "," + wrappedColumn + ")", x, y);
-            environmentDrawCount++;
+            // ctx.fillStyle = "black";
+            // ctx.textAlign = "center";
+            // ctx.textBaseline = "middle";
+            // ctx.fillText("(" + wrappedRow + "," + wrappedColumn + ")", x, y);
+            // environmentDrawCount++;
         }
     }
     ctx.restore();
@@ -489,6 +772,47 @@ function getDamageMultiplier(attacker: EnvironmentKey, defender: EnvironmentKey)
             return 1;
         }
     }
+}
+
+function drawTransformationExpBar(
+    x: number,
+    y: number,
+    environment: EnvironmentKey,
+) {
+    let tileSize: number = 15;
+    let tileCenterX: number = x - tileSize / 2 - 10;
+    let tileCenterY: number = y + tileSize / 2;
+    ctx.save();
+    drawEnvironmentTile(tileCenterX - tileSize / 2, tileCenterY - tileSize / 2, tileSize, environment);
+    ctx.restore();
+
+    ctx.save();
+    ctx.strokeStyle = "gray";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(tileCenterX - tileSize / 2, tileCenterY - tileSize / 2, tileSize, tileSize);
+    ctx.restore();
+
+    let width: number = 100;
+    let height: number = 10;
+    let topLeftX: number = tileCenterX - tileSize / 2 - width - 10;
+    let topLeftY: number = tileCenterY - height / 2;
+    let transformation: {exp: number, toNextLevel: number, level: number} = transformationLevels[environment as number];
+    let fillRatio: number = (transformation.exp / transformation.toNextLevel);
+    ctx.save();
+    ctx.strokeStyle = "black";
+    ctx.lineWidth = 1;
+    ctx.fillStyle = "gray";
+    ctx.fillRect(topLeftX, topLeftY, width * fillRatio, height);
+    ctx.strokeRect(topLeftX, topLeftY, width, height);
+    ctx.restore();
+
+    ctx.save();
+    ctx.fillStyle = "black";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    ctx.font = "14px Arial";
+    ctx.fillText("Lv. " + transformation.level, tileCenterX - width - tileSize - 15, tileCenterY + 1);
+    ctx.restore();
 }
 
 window.setTimeout(preload, 0);

@@ -1,7 +1,7 @@
 import { Color } from "./color";
 import { environmentColumns, EnvironmentKey, environmentRows } from "./environment";
 import { canvas } from "./index";
-import { getDistance, getEnvironmentColor, mapLinear, wrapValue } from "./util";
+import { getDistance, getEnvironmentColor, getTintedColor, mapLinear, wrapValue } from "./util";
 import { Vector } from "./vector";
 
 export class Enemy {
@@ -24,6 +24,7 @@ export class Enemy {
     public element: EnvironmentKey;
     public defaultColor: Color;
     public moveSpeed: number;
+    public lastMissileSpawnAttemptMillis: number;
 
     public constructor(
         row: number,
@@ -32,6 +33,7 @@ export class Enemy {
         health: number,
         element: EnvironmentKey,
         moveSpeed: number,
+        currentTimeMillis: number,
     ) {
         this.row = row;
         this.column = column;
@@ -39,19 +41,13 @@ export class Enemy {
         this.hitVelocityColumn = 0;
         this.hitVelocityRow = 0;
         this.maxHealth = health;
-        this.currentHealth = health * Math.random();
+        this.currentHealth = health;
         this.element = element;
-        let tempColor = this.element === EnvironmentKey.DEFAULT
-            ? new Color(255, 255, 255)
-            : getEnvironmentColor(this.element);
-        this.defaultColor = Color.lerpColors(
-            tempColor,
-            new Color(255, 255, 255),
-            0.15,
-        );
+        this.defaultColor = getTintedColor(this.element);
         this.moveVelocityColumn = 0;
         this.moveVelicityRow = 0;
         this.moveSpeed = moveSpeed;
+        this.lastMissileSpawnAttemptMillis = currentTimeMillis;
     }
 
     public update(

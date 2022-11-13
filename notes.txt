@@ -1,14 +1,20 @@
-color the missiles
-let enemies spawn missiles
-draw and update all missiles
-damage the player if missiles collide with them
-spawn enemies in waves
-counter for number of enemies that remain
-personal health bar
-color the player
-different kinds of enemies
-spawn text that says "CRITICAL!" whenever there's a critical hit, to help the player figure out that mechanic
+x color the missiles
+x color the player
+x let enemies spawn missiles
+x draw and update all missiles
+x damage the player if missiles collide with them
+x spawn enemies in waves
+x counter for number of enemies that remain
+x personal health bar
+x 1 kind of xp for each environment
+x level ups
+x level ups influence damage
+x spawn text that says "CRITICAL!" whenever there's a critical hit, to help the player figure out that mechanic
+x trigger a game over when the guy dies
 spawn at the start "swipe down" text to teach the main movement mechanic
+enemies get stronger each wave?
+
+different kinds of enemies
 exp?
 loot?
 forest-specific ability

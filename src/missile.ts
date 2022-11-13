@@ -1,7 +1,7 @@
 import { Color } from "./color";
 import { environmentColumns, EnvironmentKey, environmentRows } from "./environment";
 import { canvas } from "./index";
-import { getDistance } from "./util";
+import { getDistance, getTintedColor } from "./util";
 import { Vector } from "./vector";
 
 export class Missile {
@@ -19,6 +19,7 @@ export class Missile {
     public defaultColor: Color;
     public moveSpeed: number;
     public lifetimeMillis: number;
+    public creationTimeMillis: number;
     public turningSpeed: number;
     private logCounter: number = 0;
 
@@ -28,15 +29,21 @@ export class Missile {
         radius: number,
         element: EnvironmentKey,
         moveSpeed: number,
+        turningSpeed: number,
+        lifeTimeMillis: number,
+        currentTimeMillis: number,
     ) {
         this.row = row;
         this.column = column;
         this.radius = radius;
         this.element = element;
         this.moveSpeed = moveSpeed;
-        this.turningSpeed = 0.001;
+        this.turningSpeed = turningSpeed;
         this.moveVelocityColumn = 0;
         this.moveVelicityRow = 0;
+        this.defaultColor = getTintedColor(this.element);
+        this.lifetimeMillis = lifeTimeMillis;
+        this.creationTimeMillis = currentTimeMillis;
     }
 
     public update(
@@ -63,7 +70,6 @@ export class Missile {
         let moveDirection: Vector;
         if (this.lastUpdateTimeMillis === undefined) {
             moveDirection = idealMoveDirection;
-            console.log("idealMoveDirection", idealMoveDirection);
         } else {
             let idealAngle: number = idealMoveDirection.direction();
             let currentAngle: number = Math.atan2(this.moveVelicityRow, this.moveVelocityColumn);
@@ -99,11 +105,10 @@ export class Missile {
     ) {
         let moveDirection: Vector = new Vector(this.moveVelocityColumn, this.moveVelicityRow)
             .normalize()
-            .scale(10);
+            .scale(9);
         ctx.save();
         ctx.strokeStyle = "black";
-        ctx.fillStyle = "black";
-        ctx.lineWidth = 5;
+        ctx.lineWidth = 8;
         ctx.beginPath();
         ctx.moveTo(
             this.x - moveDirection.x,
@@ -115,7 +120,23 @@ export class Missile {
         );
         ctx.closePath();
         ctx.stroke();
-        // ctx.fillRect(this.x, this.y, 4, 4);
+        ctx.restore();
+
+        moveDirection = moveDirection.scale(0.9);
+        ctx.save();
+        ctx.strokeStyle = this.defaultColor.toString();
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(
+            this.x - moveDirection.x,
+            this.y - moveDirection.y,
+        );
+        ctx.lineTo(
+            this.x + moveDirection.x,
+            this.y + moveDirection.y,
+        );
+        ctx.closePath();
+        ctx.stroke();
         ctx.restore();
     }
 }
