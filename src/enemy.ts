@@ -1,7 +1,8 @@
 import { Color } from "./color";
 import { environmentColumns, EnvironmentKey, environmentRows } from "./environment";
 import { canvas } from "./index";
-import { getEnvironmentColor, mapLinear, wrapValue } from "./util";
+import { getDistance, getEnvironmentColor, mapLinear, wrapValue } from "./util";
+import { Vector } from "./vector";
 
 export class Enemy {
     public row: number;
@@ -14,12 +15,15 @@ export class Enemy {
     public hitVelocityRow: number;
     public moveVelocityColumn: number;
     public moveVelicityRow: number;
+    public totalVelocityColumn: number;
+    public totalVelocityRow: number;
     public hitRecoveryDurationMillis: number = 500;
     public lastUpdateTimeMillis: number;
     public maxHealth: number;
     public currentHealth: number;
     public element: EnvironmentKey;
     public defaultColor: Color;
+    public moveSpeed: number;
 
     public constructor(
         row: number,
@@ -27,6 +31,7 @@ export class Enemy {
         radius: number,
         health: number,
         element: EnvironmentKey,
+        moveSpeed: number,
     ) {
         this.row = row;
         this.column = column;
@@ -46,6 +51,7 @@ export class Enemy {
         );
         this.moveVelocityColumn = 0;
         this.moveVelicityRow = 0;
+        this.moveSpeed = moveSpeed;
     }
 
     public update(
@@ -54,12 +60,13 @@ export class Enemy {
         environmentTileSize: number,
         currentTimeMillis: number,
     ) {
-        let hitVelocityColumn: number = 0;
-        let hitVelocityRow: number = 0;
         let elapsedTimeMillis = 0;
         if (this.lastUpdateTimeMillis !== undefined) {
             elapsedTimeMillis = currentTimeMillis - this.lastUpdateTimeMillis;
         }
+        
+        let hitVelocityColumn: number = 0;
+        let hitVelocityRow: number = 0;
         if (this.lastHitTimeMillis !== undefined) {
             hitVelocityColumn = mapLinear(
                 this.lastHitTimeMillis,
@@ -78,14 +85,18 @@ export class Enemy {
             );
         }
 
-        let totalVelocityColumn: number = hitVelocityColumn + this.moveVelocityColumn;
-        let totalVelocityRow: number = hitVelocityRow + this.moveVelicityRow;
+        this.totalVelocityColumn = hitVelocityColumn + this.moveVelocityColumn;
+        this.totalVelocityRow = hitVelocityRow + this.moveVelicityRow;
 
-        this.column += totalVelocityColumn * elapsedTimeMillis;
-        this.row += totalVelocityRow * elapsedTimeMillis;
+        this.column += this.totalVelocityColumn * elapsedTimeMillis;
+        this.row += this.totalVelocityRow * elapsedTimeMillis;
 
-        let dx = this.getDistance(wrappedCenterColumn, this.column, 0, environmentColumns - 1) * environmentTileSize;
-        let dy = this.getDistance(wrappedCenterRow, this.row, 0, environmentRows - 1) * environmentTileSize;
+        let dx = getDistance(wrappedCenterColumn, this.column, 0, environmentColumns - 1) * environmentTileSize;
+        let dy = getDistance(wrappedCenterRow, this.row, 0, environmentRows - 1) * environmentTileSize;
+
+        let moveVelocity: Vector = new Vector(-dx, -dy).normalize().scale(this.moveSpeed);
+        this.moveVelocityColumn = moveVelocity.x;
+        this.moveVelicityRow = moveVelocity.y;
 
         this.x = canvas.width / 2 + dx;
         this.y = canvas.height / 2 + dy;
@@ -121,7 +132,7 @@ export class Enemy {
         
         let colorRatio = 1;
         if (this.lastHitTimeMillis !== undefined) {
-            let colorRatio = mapLinear(
+            colorRatio = mapLinear(
                 this.lastHitTimeMillis,
                 currentTimeMillis,
                 this.lastHitTimeMillis + 1000,
@@ -153,35 +164,5 @@ export class Enemy {
         ctx.fillRect(topLeftX, topLeftY, width * (this.currentHealth / this.maxHealth), height);
         ctx.strokeRect(topLeftX, topLeftY, width, height);
         ctx.restore();
-    }
-
-    // a is assumed to be the origin
-    private getDistance(a: number, b: number, min: number, max: number) {
-        let dist1 = wrapValue(min, b - a, max);
-        let dist2 = wrapValue(min, a - b, max);
-        let minDist: number;
-        let direction = 0;
-        //        a   b
-        // [0 1 2 3 4 5 6 7 8]
-        if (b >= a && dist1 <= dist2) {
-            direction = 1;
-            minDist = dist1;
-        //    a           b
-        // [0 1 2 3 4 5 6 7 8]
-        } else if (b >= a && dist1 > dist2) {
-            direction = -1;
-            minDist = dist2;
-        //        b   a
-        // [0 1 2 3 4 5 6 7 8]
-        } else if (b < a && dist2 <= dist1) {
-            direction = -1;
-            minDist = dist2;
-        //    b           a
-        // [0 1 2 3 4 5 6 7 8]
-        } else if (b < a && dist2 > dist1) {
-            direction = 1;
-            minDist = dist1;
-        }
-        return direction * minDist;
     }
 }

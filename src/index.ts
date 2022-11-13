@@ -2,6 +2,7 @@ import { Color } from "./color";
 import { Enemy } from "./enemy";
 import { environment, environmentColumns, EnvironmentKey, environmentRows } from "./environment";
 import { KeyState } from "./key_state";
+import { Missile } from "./missile";
 import { clampValue, collideCircles, columnToX, getCollisionVelocity, getEnvironmentColor, mapLinear, randomInt, rowToY, wrapValue } from "./util";
 import { Vector } from "./vector";
 
@@ -63,7 +64,9 @@ let environmentTimers: {currentTime: number, maxTime: number}[] = [
 let currentTransformation: number = 0;
 
 let enemies: Enemy[] = [];
-spawnEnemies();
+// spawnEnemies();
+
+let missile: Missile;
 
 document.body.appendChild(canvas);
 
@@ -184,10 +187,16 @@ function draw(currentTimeMillis: number) {
     
     let environmentDrawCount = drawEnvironment(topLeftColumn, topLeftRow);
 
-    // update all enemy x's and y's
+    if (missile === undefined) {
+        missile = new Missile(centerRow + 5, centerColumn + 5, 5, EnvironmentKey.DEFAULT, 0.0003);
+    }
+
+    // update all enemy x's and y's and move velocities
     for (let i = 0; i < enemies.length; i++) {
         enemies[i].update(centerColumn, centerRow, environmentTileSize, currentTimeMillis);
     }
+
+    missile.update(centerColumn, centerRow, environmentTileSize, currentTimeMillis);
 
     // do collision and game simulation stuff
     for (let i = 0; i < enemies.length; i++) {
@@ -260,6 +269,8 @@ function draw(currentTimeMillis: number) {
         enemies[i].draw(currentTimeMillis, ctx);
     }
 
+    missile.draw(currentTimeMillis, ctx);
+
     // update environment timers
     let currentEnvironment: EnvironmentKey = getCurrentEnvironment(centerColumn, centerRow);
     if (currentEnvironment !== (currentTransformation as EnvironmentKey)) {
@@ -316,6 +327,7 @@ function draw(currentTimeMillis: number) {
     ctx.stroke();
     ctx.restore();
 
+    // draw transform-to bar
     if (currentEnvironment !== currentTransformation) {
         let tileCenterX: number = guyCenterX + 50;
         let tileCenterY: number = guyCenterY - 70;
@@ -344,7 +356,6 @@ function draw(currentTimeMillis: number) {
         ctx.strokeRect(topLeftX, topLeftY, width, height);
         ctx.restore();
     }
-    // TODO: on transformation, set the transformed-to timer to zero
 
     // draw fps
     let fps: number = 1000 / elapsedTimeMillis;
@@ -392,12 +403,14 @@ function spawnEnemies() {
         let maxRadius: number = 20;
         let radius: number = randomInt(minRadius, maxRadius);
         let health: number = mapLinear(minRadius, radius, maxRadius, 50, 200);
+        let speed: number = mapLinear(minRadius, radius, maxRadius, 0.001, 0.0005);
         enemies.push(new Enemy(
             Math.random() * environmentColumns,
             Math.random() * environmentRows,
             radius,
             health,
             randomInt(0, 3) as EnvironmentKey,
+            speed,
         ));
     }
 }

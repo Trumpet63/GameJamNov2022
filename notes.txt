@@ -1,9 +1,16 @@
+color the missiles
+let enemies spawn missiles
+draw and update all missiles
+damage the player if missiles collide with them
+spawn enemies in waves
+counter for number of enemies that remain
+personal health bar
+color the player
+different kinds of enemies
+spawn text that says "CRITICAL!" whenever there's a critical hit, to help the player figure out that mechanic
+spawn at the start "swipe down" text to teach the main movement mechanic
+exp?
+loot?
 forest-specific ability
 water-specific ability
 desert-specic ability
-enemies move toward you
-counter for number of enemies that exist
-personal health bar
-different kinds of enemies
-exp?
-loot?

@@ -81,3 +81,33 @@ export function getEnvironmentColor(key: EnvironmentKey): Color {
             return new Color(0, 0, 255);
     }
 }
+
+// a is assumed to be the origin
+export function getDistance(a: number, b: number, min: number, max: number) {
+    let dist1 = wrapValue(min, b - a, max);
+    let dist2 = wrapValue(min, a - b, max);
+    let minDist: number;
+    let direction = 0;
+    //        a   b
+    // [0 1 2 3 4 5 6 7 8]
+    if (b >= a && dist1 <= dist2) {
+        direction = 1;
+        minDist = dist1;
+    //    a           b
+    // [0 1 2 3 4 5 6 7 8]
+    } else if (b >= a && dist1 > dist2) {
+        direction = -1;
+        minDist = dist2;
+    //        b   a
+    // [0 1 2 3 4 5 6 7 8]
+    } else if (b < a && dist2 <= dist1) {
+        direction = -1;
+        minDist = dist2;
+    //    b           a
+    // [0 1 2 3 4 5 6 7 8]
+    } else if (b < a && dist2 > dist1) {
+        direction = 1;
+        minDist = dist1;
+    }
+    return direction * minDist;
+}

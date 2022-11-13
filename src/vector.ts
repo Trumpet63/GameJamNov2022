@@ -34,4 +34,8 @@ export class Vector {
     public normalize(): Vector {
         return new Vector(this.x, this.y).scale(1 / this.magnitude());
     }
+
+    public direction(): number {
+        return Math.atan2(this.y, this.x);
+    }
 }
