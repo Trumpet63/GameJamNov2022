@@ -1,3 +1,7 @@
+import { Color } from "./color";
+import { EnvironmentKey } from "./environment";
+import { Vector } from "./vector";
+
 // note: assumes fromStart is less than fromEnd, toStart is less than toEnd
 export function mapLinear(
     fromStart: number,
@@ -40,4 +44,40 @@ export function wrapValue(min: number, value: number, max: number) {
 // https://stackoverflow.com/questions/4467539/javascript-modulo-gives-a-negative-result-for-negative-numbers
 function mod(n: number, m: number) {
     return ((n % m) + m) % m;
+}
+
+export function columnToX(column: number, topLeftColumn: number, environmentTileSize: number) {
+    return (column - topLeftColumn) * environmentTileSize;
+}
+
+export function rowToY(row: number, topLeftRow: number, environmentTileSize: number) {
+    return (row - topLeftRow) * environmentTileSize;
+}
+
+export function collideCircles(x1: number, y1: number, r1: number, x2: number, y2: number, r2: number) {
+    return Math.abs(x1 - x2) < r1 + r2
+        && Math.abs(y1 - y2) < r1 + r2;
+}
+
+export function getCollisionVelocity(c1: Vector, c2: Vector, m1: number, m2: number, v1: Vector, v2: Vector): Vector {
+    let c1Minusc2: Vector = c1.minus(c2);
+    return c1Minusc2
+        .scale(
+            -2 * m2 / (m1 + m2)
+            * Vector.innerProduct(v1.minus(v2), c1Minusc2)
+            / c1Minusc2.normSquared()
+        );
+}
+
+export function getEnvironmentColor(key: EnvironmentKey): Color {
+    switch(key) {
+        case EnvironmentKey.DEFAULT:
+            return new Color(100, 255, 100);
+        case EnvironmentKey.FOREST:
+            return new Color(0, 200, 0);
+        case EnvironmentKey.DESERT:
+            return new Color(255, 255, 50);
+        case EnvironmentKey.WATER:
+            return new Color(0, 0, 255);
+    }
 }

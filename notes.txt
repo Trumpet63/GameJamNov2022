@@ -1,11 +1,8 @@
-enemies that spawn randomly
-be able to bounce off of enemies
-damage enemies proportional to your speed
-display enemy health bars
+forest-specific ability
+water-specific ability
+desert-specic ability
 enemies move toward you
 counter for number of enemies that exist
-transform after spending enough time in a specific biome
-can't transform again too quickly
 personal health bar
 different kinds of enemies
 exp?
