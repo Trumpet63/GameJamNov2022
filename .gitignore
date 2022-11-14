@@ -1,1 +1,3 @@
 /node_modules
+/butler_release
+*.bat

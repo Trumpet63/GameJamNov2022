@@ -24,7 +24,10 @@ export class Enemy {
     public element: EnvironmentKey;
     public defaultColor: Color;
     public moveSpeed: number;
+    public lastBarrageStartMillis: number;
     public lastMissileSpawnAttemptMillis: number;
+    public barrageNumber: number;
+    public lastBarrageMissile: number;
 
     public constructor(
         row: number,
@@ -33,6 +36,7 @@ export class Enemy {
         health: number,
         element: EnvironmentKey,
         moveSpeed: number,
+        barrageNumber: number,
         currentTimeMillis: number,
     ) {
         this.row = row;
@@ -47,6 +51,9 @@ export class Enemy {
         this.moveVelocityColumn = 0;
         this.moveVelicityRow = 0;
         this.moveSpeed = moveSpeed;
+        this.barrageNumber = barrageNumber;
+        this.lastBarrageMissile = this.barrageNumber;
+        this.lastBarrageStartMillis = currentTimeMillis;
         this.lastMissileSpawnAttemptMillis = currentTimeMillis;
     }
 

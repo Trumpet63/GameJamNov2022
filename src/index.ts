@@ -101,7 +101,6 @@ let isGameOver: boolean = false;
 let gameOverTimeMillis: number;
 let isGameWon: boolean;
 
-
 document.body.appendChild(canvas);
 
 document.onkeydown = (e: KeyboardEvent) => {
@@ -306,7 +305,7 @@ function draw(currentTimeMillis: number) {
                 if (currentTransformation !== EnvironmentKey.DEFAULT) {
                     transformationLevels[currentTransformation as number].exp += expGain;
                 }
-                transformationLevels[EnvironmentKey.DEFAULT as number].exp += expGain * 0.3;
+                transformationLevels[EnvironmentKey.DEFAULT as number].exp += expGain * 0.6;
             }
 
             // spawn floating text
@@ -404,17 +403,26 @@ function draw(currentTimeMillis: number) {
     }
 
     // enemies can maybe spawn missiles
+    let barrageRateMillis: number = 5000;
+    let missileFireRateMillis: number = 500;
     for (let i = 0; i < enemies.length; i++) {
         let enemy = enemies[i];
-        if (currentTimeMillis - enemy.lastMissileSpawnAttemptMillis > 1000) {
-            let spawnChance = mapLinear(minEnemyRadius, enemy.radius, maxEnemyRadius, 0.2, 1);
+        if(currentTimeMillis - enemy.lastBarrageStartMillis > barrageRateMillis) {
+            enemy.lastBarrageMissile = 0;
+            enemy.lastBarrageStartMillis = currentTimeMillis;
+        }
+        if (currentTimeMillis - enemy.lastMissileSpawnAttemptMillis > missileFireRateMillis
+            && enemy.lastBarrageMissile < enemy.barrageNumber) {
+            let spawnChance = mapLinear(minEnemyRadius, enemy.radius, maxEnemyRadius, 0.4, 1);
             if (Math.random() <= spawnChance) {
                 let moveSpeed = mapLinear(minEnemyRadius, enemy.radius, maxEnemyRadius, 0.0003, 0.001);
                 let turnSpeed = mapLinear(minEnemyRadius, enemy.radius, maxEnemyRadius, 0.001, 0.0001);
                 let lifeTimeMillis = mapLinear(minEnemyRadius, enemy.radius, maxEnemyRadius, 3000, 8000);
                 missiles.push(new Missile(enemy.row, enemy.column, 3, enemy.element, moveSpeed, turnSpeed, lifeTimeMillis, currentTimeMillis));
             }
+            enemy.lastBarrageMissile++;
             enemy.lastMissileSpawnAttemptMillis = currentTimeMillis;
+            enemy.lastBarrageStartMillis = currentTimeMillis;
         }
     }
 
@@ -733,6 +741,14 @@ function spawnEnemies(currentWave: number) {
         let radius: number = wave[i];
         let health: number = mapLinear(minEnemyRadius, radius, maxEnemyRadius, 50, 200);
         let speed: number = mapLinear(minEnemyRadius, radius, maxEnemyRadius, 0.001, 0.0005);
+        let barrageNumber: number;
+        if (radius < 10) {
+            barrageNumber = 1;
+        } else if (radius >= 10 && radius < 15) {
+            barrageNumber = randomInt(2, 3);
+        } else if (radius >= 15) {
+            barrageNumber = randomInt(4, 5);
+        }
         enemies.push(new Enemy(
             Math.random() * environmentColumns,
             Math.random() * environmentRows,
@@ -740,6 +756,7 @@ function spawnEnemies(currentWave: number) {
             health,
             randomInt(0, 3) as EnvironmentKey,
             speed,
+            barrageNumber,
             currentTimeMillis,
         ));
     }

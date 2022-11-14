@@ -7,8 +7,8 @@ export enum EnvironmentKey {
     WATER,
 }
 export let environment: EnvironmentKey[][] = [];
-export let environmentRows: number = 30;
-export let environmentColumns: number = 30;
+export let environmentRows: number = 60;
+export let environmentColumns: number = 60;
 
 for (let i = 0; i < environmentRows; i++) {
     let row: EnvironmentKey[] = [];
